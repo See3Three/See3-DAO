@@ -26,6 +26,8 @@ mod See3_DAO {
         account: AccountId,
     }
 
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
     enum VoteType {
         None,
         ChangeKeeper(AccountId, AccountId),
@@ -38,8 +40,8 @@ mod See3_DAO {
     pub struct See3Dao {
         total_supply: u32,
         vote: VoteType,
-        vote_end_block: u64,
-        earliest_next_vote_block: u64,
+        vote_end_block: u32,
+        earliest_next_vote_block: u32,
         voters: Mapping<AccountId, bool>, 
         casted_votes: u32, 
         keepers: [AccountId; 3],
@@ -105,16 +107,16 @@ mod See3_DAO {
             }
             if !(self.vote == VoteType::None) {
                 let sender_voting_power = self.voting_power_of(sender);
-                self.balances.insert(sender, (&(sender_balance - amount), &sender_voting_power));
+                self.balances.insert(sender, &((sender_balance - amount), sender_voting_power));
                 // Update Recipient Balance, but Keep Snapshot The Same
                 let recipient_balance = self.balance_of(recipient);
                 let recipient_voting_power = self.voting_power_of(recipient);
-                self.balances.insert(recipient, (&(recipient_balance + amount), &recipient_voting_power));
+                self.balances.insert(recipient, &((recipient_balance + amount), recipient_voting_power));
             } else {
-                self.balances.insert(sender, (&(sender_balance - amount), &(sender_balance - amount)));
+                self.balances.insert(sender, &((sender_balance - amount), (sender_balance - amount)));
                 // Update Recipient Balance, and Snapshot
                 let recipient_balance = self.balance_of(recipient);
-                self.balances.insert(recipient, (&(recipient_balance + amount), &(recipient_balance + amount)));
+                self.balances.insert(recipient, &((recipient_balance + amount), (recipient_balance + amount)));
             }
         }
 
@@ -160,7 +162,7 @@ mod See3_DAO {
                         },
                         VoteType::AddToTrustList(account, trust_keys) => {
                             if self.withdrawable.get(account).unwrap_or(0) > 100 {
-                                self.trust_list.insert(account, trust_keys);
+                                self.trust_list.insert(account, &trust_keys);
                             }
                         },
                         VoteType::RemoveFromTrustList(account) => {
@@ -179,7 +181,7 @@ mod See3_DAO {
         #[ink(message, payable)]
         pub fn deposit(&mut self) {
             let sender = self.env().caller();
-            let deposit: u32 = self.env().transferred_value();
+            let deposit: u32 = self.env().transferred_value().try_into().unwrap();
             self.withdrawable.insert(&sender, &deposit);
         }
 
@@ -187,7 +189,8 @@ mod See3_DAO {
         pub fn withdraw(&mut self) {
             let sender = self.env().caller();
             let deposit = self.deposit_of(sender);
-            self.env().transfer(sender, deposit).expect("Withdrawal Failed.");
+            self.env().transfer(sender, deposit.try_into().unwrap()).expect("Withdrawal Failed.");
+            self.withdrawable.remove(&sender);
         }
 
         fn clear_vote_state(&mut self) {
@@ -197,3 +200,4 @@ mod See3_DAO {
         }
     }
 }
+
