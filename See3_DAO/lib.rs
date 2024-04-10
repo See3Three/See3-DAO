@@ -1,4 +1,4 @@
-#![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(not(feature = "std"), no_std, no_main)]
 
 #[ink::contract]
 mod See3_DAO {
@@ -9,23 +9,6 @@ mod See3_DAO {
 
     type TrustKey = [[u8; 32]; 2];
 
-    struct ChangeKeeper {
-        old_keeper: AccountId,
-        new_keeper: AccountId,
-    }
-
-    struct AddToTrustList {
-        account: AccountId,
-        trust_keys: TrustKey,
-    }
-
-    struct RemoveFromTrustList {
-        account: AccountId,
-    }
-
-    struct SlashParticipant {
-        account: AccountId,
-    }
 
     #[derive(PartialEq, Debug, scale::Decode, scale::Encode)]
     #[cfg_attr(
@@ -111,16 +94,20 @@ mod See3_DAO {
             }
             if !(self.vote == VoteType::None) {
                 let sender_voting_power = self.voting_power_of(sender);
-                self.balances.insert(sender, &((sender_balance - amount), sender_voting_power));
+                let updated_sender_balance = sender_balance.checked_sub(amount).expect("Overflow in balance subtraction");
+                self.balances.insert(sender, &(updated_sender_balance, sender_voting_power));
                 // Update Recipient Balance, but Keep Snapshot The Same
                 let recipient_balance = self.balance_of(recipient);
                 let recipient_voting_power = self.voting_power_of(recipient);
-                self.balances.insert(recipient, &((recipient_balance + amount), recipient_voting_power));
+                let updated_recipient_balance = recipient_balance.checked_add(amount).expect("Overflow in balance addition");
+                self.balances.insert(recipient, &(updated_recipient_balance, recipient_voting_power));
             } else {
-                self.balances.insert(sender, &((sender_balance - amount), (sender_balance - amount)));
+                let updated_sender_balance = sender_balance.checked_sub(amount).expect("Overflow in balance subtraction");
+                self.balances.insert(sender, &(updated_sender_balance, updated_sender_balance));
                 // Update Recipient Balance, and Snapshot
                 let recipient_balance = self.balance_of(recipient);
-                self.balances.insert(recipient, &((recipient_balance + amount), (recipient_balance + amount)));
+                let updated_recipient_balance = recipient_balance.checked_add(amount).expect("Overflow in balance addition");
+                self.balances.insert(recipient, &((updated_recipient_balance), (updated_recipient_balance)));
             }
         }
 
@@ -130,8 +117,8 @@ mod See3_DAO {
             if (self.vote == VoteType::None) && (current_block > self.earliest_next_vote_block) {
                 self.vote = vote;
                 self.casted_votes = 0;
-                self.vote_end_block = current_block + 1000; 
-                self.earliest_next_vote_block = self.vote_end_block + 1000;
+                self.vote_end_block = current_block.checked_add(1000).expect("Overflow in vote_end_block calculation");
+                self.earliest_next_vote_block = self.vote_end_block.checked_add(1000).expect("Overflow in earliest_next_vote_block calculation");
             }
         }
 
@@ -142,7 +129,8 @@ mod See3_DAO {
             let has_voted = self.voters.get(&sender).unwrap_or(false);
             if !has_voted && (current_block < self.vote_end_block) {
                 if in_favor {
-                    self.casted_votes += self.voting_power_of(sender);
+                    let sender_voting_power = self.voting_power_of(sender);
+                    self.casted_votes = self.casted_votes.checked_add(sender_voting_power).expect("Overflow in adding votes");
                 }
                 self.voters.insert(&sender, &true);
             } else {
@@ -204,4 +192,3 @@ mod See3_DAO {
         }
     }
 }
-
