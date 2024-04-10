@@ -2,6 +2,7 @@
 
 #[ink::contract]
 mod See3_DAO {
+    use ink::primitives::Key;
     use ink::{
         storage::Mapping,
     };
@@ -26,9 +27,12 @@ mod See3_DAO {
         account: AccountId,
     }
 
-    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-    #[ink::scale_derive(Encode, Decode, TypeInfo)]
-    enum VoteType {
+    #[derive(PartialEq, Debug, scale::Decode, scale::Encode)]
+    #[cfg_attr(
+        feature = "std",
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
+    )]
+    pub enum VoteType {
         None,
         ChangeKeeper(AccountId, AccountId),
         AddToTrustList(AccountId, TrustKey),
